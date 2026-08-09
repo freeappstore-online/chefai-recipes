@@ -1,0 +1,14 @@
+{
+  "name": "chefai-recipes",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": { "node": ">=22" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "scripts": {
+    "dev": "pnpm --filter @chefai-recipes/web dev",
+    "build": "pnpm --filter @chefai-recipes/web build",
+    "preview": "pnpm --filter @chefai-recipes/web preview",
+    "typecheck": "pnpm --filter @chefai-recipes/web exec tsc -b",
+    "test": "pnpm --filter @chefai-recipes/web test"
+  }
+}

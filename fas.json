@@ -1,0 +1,14 @@
+{
+  "apis": [
+    {
+      "host": "api.openai.com",
+      "secretName": "OPENAI_API_KEY",
+      "injectKind": "bearer",
+      "pattern": "https://api.openai.com/",
+      "methods": [
+        "GET"
+      ],
+      "description": "OpenAI GPT-4o for generating recipes and answering cooking questions"
+    }
+  ]
+}
