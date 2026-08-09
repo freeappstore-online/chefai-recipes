@@ -5,65 +5,79 @@ import { useAuth } from "@freeappstore/sdk/hooks";
 
 const fas = initApp({ appId: "chefai-recipes" });
 
-const STORAGE_KEY = "chefai_avoid";
+const AVOID_KEY = "chefai_avoid_v1";
 
-const PRESETS = ["gluten", "dairy", "nuts", "eggs", "shellfish", "soy", "meat", "alcohol", "spicy", "sugar"];
-
-const SUGGESTIONS = [
-  "🥗 Summer salad",
-  "🍝 Quick pasta",
+const QUICK_SEARCHES = [
+  "🥗 Caesar salad",
+  "🍝 Spaghetti bolognese",
   "🥞 Fluffy pancakes",
-  "🍲 Winter soup",
-  "🌮 Easy tacos",
+  "🍲 Tomato soup",
+  "🌮 Beef tacos",
   "🎂 Chocolate cake",
   "🍛 Chicken curry",
-  "🥦 Stir fry",
+  "🥦 Veggie stir fry",
 ];
 
-const TWEAKS = [
-  "I don't have that utensil — alternatives?",
+const PRESET_AVOIDS = [
+  "gluten", "dairy", "nuts", "eggs",
+  "shellfish", "soy", "meat", "alcohol",
+];
+
+const FOLLOW_UPS = [
   "Make it vegetarian",
   "Simpler version please",
   "What can I substitute?",
   "Scale for 2 people",
+  "I don't have that utensil",
   "More flavour tips",
 ];
 
-type ChatMsg = { id: string; role: "user" | "assistant"; content: string };
+interface Msg {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+}
 
-function RecipeText({ text }: { text: string }) {
+function RecipeDisplay({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="space-y-1">
+    <div>
       {lines.map((line, i) => {
         if (line.startsWith("# ")) {
-          return <h2 key={i} className="text-lg font-bold mt-2" style={{ fontFamily: "Fraunces, serif", color: "var(--accent)" }}>{line.slice(2)}</h2>;
+          return (
+            <p key={i} style={{ fontFamily: "Fraunces, serif", fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)", marginTop: "0.5rem", marginBottom: "0.25rem" }}>
+              {line.slice(2)}
+            </p>
+          );
         }
         if (line.startsWith("## ")) {
-          return <h3 key={i} className="text-base font-bold mt-3 mb-1" style={{ fontFamily: "Fraunces, serif" }}>{line.slice(3)}</h3>;
-        }
-        if (line.startsWith("### ")) {
-          return <h4 key={i} className="text-sm font-bold mt-2" style={{ fontFamily: "Fraunces, serif" }}>{line.slice(4)}</h4>;
-        }
-        const numMatch = line.match(/^(\d+)\.\s(.+)$/);
-        if (numMatch) {
           return (
-            <div key={i} className="flex gap-2 items-start py-0.5">
-              <span className="shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center mt-0.5" style={{ background: "var(--accent)", color: "#fff" }}>{numMatch[1]}</span>
-              <span className="leading-relaxed text-sm">{numMatch[2]}</span>
+            <p key={i} style={{ fontFamily: "Fraunces, serif", fontWeight: 700, marginTop: "0.75rem", marginBottom: "0.25rem" }}>
+              {line.slice(3)}
+            </p>
+          );
+        }
+        const num = line.match(/^(\d+)\.\s(.+)$/);
+        if (num) {
+          return (
+            <div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", margin: "0.25rem 0" }}>
+              <span style={{ background: "var(--accent)", color: "#fff", borderRadius: "50%", width: "1.25rem", height: "1.25rem", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, marginTop: "0.15rem" }}>
+                {num[1]}
+              </span>
+              <span style={{ fontSize: "0.875rem", lineHeight: 1.6 }}>{num[2]}</span>
             </div>
           );
         }
         if (line.startsWith("- ") || line.startsWith("* ")) {
           return (
-            <div key={i} className="flex gap-2 items-start py-0.5">
-              <span className="shrink-0 w-1.5 h-1.5 rounded-full mt-2" style={{ background: "var(--accent)" }} />
-              <span className="leading-relaxed text-sm">{line.slice(2)}</span>
+            <div key={i} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", margin: "0.2rem 0" }}>
+              <span style={{ width: "0.35rem", height: "0.35rem", borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: "0.45rem" }} />
+              <span style={{ fontSize: "0.875rem", lineHeight: 1.6 }}>{line.slice(2)}</span>
             </div>
           );
         }
-        if (line.trim() === "" || line.trim() === "---") return <div key={i} className="h-1" />;
-        return <p key={i} className="text-sm leading-relaxed">{line}</p>;
+        if (line.trim() === "" || line.trim() === "---") return <div key={i} style={{ height: "0.25rem" }} />;
+        return <p key={i} style={{ fontSize: "0.875rem", lineHeight: 1.6, margin: "0.1rem 0" }}>{line}</p>;
       })}
     </div>
   );
@@ -74,51 +88,62 @@ export default function App() {
   const [view, setView] = useState<"chat" | "diet">("chat");
   const [avoid, setAvoid] = useState<string[]>([]);
   const [avoidInput, setAvoidInput] = useState("");
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     try {
-      const s = localStorage.getItem(STORAGE_KEY);
-      if (s) setAvoid(JSON.parse(s));
-    } catch { /* ignore */ }
+      const s = localStorage.getItem(AVOID_KEY);
+      if (s) setAvoid(JSON.parse(s) as string[]);
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(avoid));
+    localStorage.setItem(AVOID_KEY, JSON.stringify(avoid));
   }, [avoid]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, busy]);
 
   function addAvoid() {
     const v = avoidInput.trim().toLowerCase();
     if (v && !avoid.includes(v)) {
-      setAvoid(p => [...p, v]);
+      setAvoid((prev) => [...prev, v]);
       setAvoidInput("");
     }
   }
 
-  async function send(text?: string) {
-    const msg = (text ?? input).trim();
-    if (!msg || loading || !user) return;
+  async function sendMessage(override?: string) {
+    const text = (override ?? input).trim();
+    if (!text || busy || !user) return;
 
-    const userMsg: ChatMsg = { id: String(Date.now()), role: "user", content: msg };
-    const history = [...messages, userMsg];
-    setMessages(history);
+    const userMsg: Msg = { id: String(Date.now()), role: "user", text };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
     setInput("");
-    setLoading(true);
+    setBusy(true);
 
-    const avoidLine = avoid.length > 0
-      ? `IMPORTANT: Never include these ingredients or foods: ${avoid.join(", ")}.`
-      : "";
+    const avoidLine =
+      avoid.length > 0
+        ? `IMPORTANT — never include these in any recipe: ${avoid.join(", ")}.`
+        : "";
 
-    const systemPrompt = `You are ChefAI, a friendly personal chef. ${avoidLine}
-When asked for a recipe, always provide: recipe name (as # heading), short description, prep time, cook time, servings, then ## Ingredients (bullet list), then ## Instructions (numbered steps), then ## Tips (optional). Keep steps clear and beginner-friendly. For follow-up questions about substitutions or missing utensils, give practical alternatives immediately.`;
+    const systemPrompt = `You are ChefAI, a friendly personal chef assistant. ${avoidLine}
+When the user asks for a recipe, respond with:
+- Recipe name as a # heading
+- Short description (1 sentence)
+- Prep time and cook time
+- Servings
+- ## Ingredients section with a bullet list
+- ## Instructions section with numbered steps (clear and beginner-friendly)
+- ## Tips section (optional, 1-2 tips)
+For follow-up questions about missing ingredients or utensils, give practical alternatives. Keep responses warm and encouraging.`;
 
     try {
       const res = await fas.proxy.fetch("api.openai.com/v1/chat/completions", {
@@ -128,20 +153,28 @@ When asked for a recipe, always provide: recipe name (as # heading), short descr
           model: "gpt-4o",
           messages: [
             { role: "system", content: systemPrompt },
-            ...history.map(m => ({ role: m.role, content: m.content })),
+            ...updated.map((m) => ({ role: m.role, content: m.text })),
           ],
           max_tokens: 1200,
           temperature: 0.7,
         }),
       });
 
-      const data = await res.json() as { choices?: { message?: { content?: string } }[] };
-      const reply = data?.choices?.[0]?.message?.content ?? "Sorry, I couldn't get a recipe right now. Please try again!";
-      setMessages(p => [...p, { id: String(Date.now() + 1), role: "assistant", content: reply }]);
+      if (!res.ok) throw new Error("API error");
+
+      const data = await res.json() as {
+        choices: Array<{ message: { content: string } }>;
+      };
+
+      const reply = data.choices?.[0]?.message?.content ?? "Sorry, I couldn't get a recipe. Please try again!";
+      setMessages((prev) => [...prev, { id: String(Date.now() + 1), role: "assistant", text: reply }]);
     } catch {
-      setMessages(p => [...p, { id: String(Date.now() + 1), role: "assistant", content: "Something went wrong. Please try again! 🍳" }]);
+      setMessages((prev) => [
+        ...prev,
+        { id: String(Date.now() + 1), role: "assistant", text: "Something went wrong. Please try again! 🍳" },
+      ]);
     } finally {
-      setLoading(false);
+      setBusy(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }
@@ -154,108 +187,164 @@ When asked for a recipe, always provide: recipe name (as # heading), short descr
   return (
     <Shell navItems={navItems} title="ChefAI">
 
-      {/* ── Diet Settings ── */}
+      {/* ── DIET VIEW ── */}
       {view === "diet" && (
-        <div className="max-w-lg mx-auto w-full overflow-y-auto pb-8">
-          <h1 className="text-3xl font-bold mb-1" style={{ fontFamily: "Fraunces, serif" }}>My Diet</h1>
-          <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>ChefAI will never use these in any recipe.</p>
+        <div style={{ maxWidth: "32rem", margin: "0 auto", width: "100%", overflowY: "auto", paddingBottom: "2rem" }}>
+          <h1 style={{ fontFamily: "Fraunces, serif", fontSize: "2rem", fontWeight: 700, marginBottom: "0.25rem" }}>
+            My Dietary Restrictions
+          </h1>
+          <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
+            Any food you add here will never appear in your recipes.
+          </p>
 
-          <div className="rounded-2xl p-4 mb-4" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-            <div className="flex gap-2">
+          {/* Input */}
+          <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem", padding: "1rem", marginBottom: "1rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
               <input
                 value={avoidInput}
-                onChange={e => setAvoidInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addAvoid()}
-                placeholder="e.g. peanuts, dairy, spicy…"
-                className="flex-1 rounded-xl px-4 py-2 text-sm outline-none"
-                style={{ background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink)" }}
+                onChange={(e) => setAvoidInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addAvoid()}
+                placeholder="e.g. peanuts, dairy, shellfish…"
+                style={{
+                  flex: 1, borderRadius: "0.75rem", padding: "0.5rem 1rem",
+                  fontSize: "0.875rem", outline: "none",
+                  background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink)",
+                }}
               />
-              <button onClick={addAvoid} className="px-4 py-2 rounded-xl text-sm font-semibold hover:opacity-80" style={{ background: "var(--accent)", color: "#fff" }}>
+              <button
+                onClick={addAvoid}
+                style={{ background: "var(--accent)", color: "#fff", borderRadius: "0.75rem", padding: "0.5rem 1rem", fontWeight: 600, fontSize: "0.875rem", border: "none", cursor: "pointer" }}
+              >
                 Add
               </button>
             </div>
           </div>
 
+          {/* Tags */}
           {avoid.length > 0 && (
-            <div className="rounded-2xl p-4 mb-4" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-              <p className="text-xs font-semibold mb-3" style={{ color: "var(--muted)" }}>AVOIDING ({avoid.length})</p>
-              <div className="flex flex-wrap gap-2">
-                {avoid.map(r => (
-                  <span key={r} className="flex items-center gap-1 px-3 py-1 rounded-full text-sm" style={{ background: "var(--paper)", border: "1px solid var(--line-strong)" }}>
+            <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem", padding: "1rem", marginBottom: "1rem" }}>
+              <p style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--muted)", marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Avoiding ({avoid.length})
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {avoid.map((r) => (
+                  <span key={r} style={{ display: "flex", alignItems: "center", gap: "0.25rem", background: "var(--paper)", border: "1px solid var(--line-strong)", borderRadius: "9999px", padding: "0.25rem 0.75rem", fontSize: "0.875rem" }}>
                     🚫 {r}
-                    <button onClick={() => setAvoid(p => p.filter(x => x !== r))} className="ml-1 font-bold hover:opacity-60" style={{ color: "var(--error)" }}>×</button>
+                    <button
+                      onClick={() => setAvoid((prev) => prev.filter((x) => x !== r))}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--error)", fontWeight: 700, fontSize: "1rem", lineHeight: 1, padding: "0 0.1rem" }}
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          <p className="text-xs font-semibold mb-2" style={{ color: "var(--muted)" }}>QUICK ADD</p>
-          <div className="flex flex-wrap gap-2 mb-6">
-            {PRESETS.map(p => (
-              <button key={p} onClick={() => { if (!avoid.includes(p)) setAvoid(a => [...a, p]); }}
+          {/* Presets */}
+          <p style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--muted)", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Quick add
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1.5rem" }}>
+            {PRESET_AVOIDS.map((p) => (
+              <button
+                key={p}
+                onClick={() => { if (!avoid.includes(p)) setAvoid((a) => [...a, p]); }}
                 disabled={avoid.includes(p)}
-                className="px-3 py-1 rounded-full text-sm hover:opacity-70 disabled:opacity-40"
-                style={{ background: "var(--panel)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+                style={{
+                  background: "var(--panel)", border: "1px solid var(--line-strong)", borderRadius: "9999px",
+                  padding: "0.25rem 0.75rem", fontSize: "0.875rem", cursor: "pointer", color: "var(--ink)",
+                  opacity: avoid.includes(p) ? 0.4 : 1,
+                }}
+              >
                 {avoid.includes(p) ? "✓ " : "+ "}{p}
               </button>
             ))}
           </div>
 
-          <button onClick={() => setView("chat")} className="w-full py-3 rounded-xl font-semibold hover:opacity-80" style={{ background: "var(--accent)", color: "#fff" }}>
+          <button
+            onClick={() => setView("chat")}
+            style={{ width: "100%", background: "var(--accent)", color: "#fff", borderRadius: "0.75rem", padding: "0.75rem", fontWeight: 600, fontSize: "0.95rem", border: "none", cursor: "pointer" }}
+          >
             Start Cooking 🍳
           </button>
         </div>
       )}
 
-      {/* ── Chat ── */}
+      {/* ── CHAT VIEW ── */}
       {view === "chat" && (
-        <div className="flex flex-col h-full w-full max-w-3xl mx-auto">
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", maxWidth: "48rem", margin: "0 auto" }}>
 
-          {/* Top bar */}
-          <div className="flex items-center justify-between mb-3 shrink-0">
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexShrink: 0 }}>
             <div>
-              <h1 className="text-xl font-bold" style={{ fontFamily: "Fraunces, serif" }}>ChefAI 👨‍🍳</h1>
+              <h1 style={{ fontFamily: "Fraunces, serif", fontSize: "1.25rem", fontWeight: 700 }}>ChefAI 👨‍🍳</h1>
               {avoid.length > 0 && (
-                <p className="text-xs" style={{ color: "var(--muted)" }}>Avoiding: {avoid.slice(0, 3).join(", ")}{avoid.length > 3 ? ` +${avoid.length - 3} more` : ""}</p>
+                <p style={{ fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.1rem" }}>
+                  Avoiding: {avoid.slice(0, 3).join(", ")}{avoid.length > 3 ? ` +${avoid.length - 3} more` : ""}
+                </p>
               )}
             </div>
-            <div className="flex gap-2 items-center">
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               {messages.length > 0 && (
-                <button onClick={() => setMessages([])} className="px-3 py-1 rounded-lg text-xs hover:opacity-70" style={{ border: "1px solid var(--line)", color: "var(--muted)" }}>Clear</button>
+                <button
+                  onClick={() => setMessages([])}
+                  style={{ border: "1px solid var(--line)", borderRadius: "0.5rem", padding: "0.25rem 0.75rem", fontSize: "0.75rem", background: "none", cursor: "pointer", color: "var(--muted)" }}
+                >
+                  Clear
+                </button>
               )}
               {!authLoading && !user && (
-                <button onClick={() => fas.auth.signIn()} className="px-4 py-1.5 rounded-xl text-sm font-semibold hover:opacity-80" style={{ background: "var(--accent)", color: "#fff" }}>Sign in</button>
+                <button
+                  onClick={() => fas.auth.signIn()}
+                  style={{ background: "var(--accent)", color: "#fff", borderRadius: "0.75rem", padding: "0.375rem 1rem", fontWeight: 600, fontSize: "0.875rem", border: "none", cursor: "pointer" }}
+                >
+                  Sign in
+                </button>
               )}
               {user && (
-                <span className="text-xs px-3 py-1.5 rounded-xl" style={{ background: "var(--panel)", color: "var(--muted)" }}>👤 {user.login}</span>
+                <span style={{ background: "var(--panel)", borderRadius: "0.75rem", padding: "0.25rem 0.75rem", fontSize: "0.75rem", color: "var(--muted)" }}>
+                  👤 {user.login}
+                </span>
               )}
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto space-y-3 pb-3">
+          {/* Messages area */}
+          <div style={{ flex: 1, overflowY: "auto", paddingBottom: "0.75rem" }}>
 
             {/* Empty state */}
-            {messages.length === 0 && !loading && (
-              <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <div className="text-5xl mb-3">🍽️</div>
-                <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: "Fraunces, serif" }}>What would you like to cook?</h2>
-                <p className="text-sm mb-6 max-w-xs" style={{ color: "var(--muted)" }}>Search for any recipe and I'll show you step-by-step how to make it.</p>
+            {messages.length === 0 && !busy && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", textAlign: "center", padding: "1rem" }}>
+                <div style={{ fontSize: "3.5rem", marginBottom: "0.75rem" }}>🍽️</div>
+                <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+                  What would you like to cook?
+                </h2>
+                <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginBottom: "1.5rem", maxWidth: "22rem" }}>
+                  Search for any recipe and I'll show you exactly how to make it, step by step.
+                </p>
 
                 {!user && !authLoading && (
-                  <div className="rounded-2xl p-5 mb-5 w-full max-w-xs" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-                    <p className="font-semibold mb-1">Sign in to get started</p>
-                    <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>One tap with GitHub.</p>
-                    <button onClick={() => fas.auth.signIn()} className="w-full py-2 rounded-xl font-semibold hover:opacity-80" style={{ background: "var(--accent)", color: "#fff" }}>Sign in with GitHub</button>
+                  <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem", padding: "1.25rem", marginBottom: "1.25rem", width: "100%", maxWidth: "20rem" }}>
+                    <p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Sign in to get started</p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "0.75rem" }}>One tap with GitHub — no password needed.</p>
+                    <button
+                      onClick={() => fas.auth.signIn()}
+                      style={{ width: "100%", background: "var(--accent)", color: "#fff", borderRadius: "0.75rem", padding: "0.5rem", fontWeight: 600, border: "none", cursor: "pointer" }}
+                    >
+                      Sign in with GitHub
+                    </button>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2 w-full max-w-md">
-                  {SUGGESTIONS.map(s => (
-                    <button key={s} onClick={() => { setInput(s.replace(/^.\s/, "")); setTimeout(() => inputRef.current?.focus(), 50); }}
-                      className="text-left px-4 py-3 rounded-2xl text-sm hover:scale-[1.02] transition-transform"
-                      style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--ink)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", width: "100%", maxWidth: "28rem" }}>
+                  {QUICK_SEARCHES.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => { setInput(s.replace(/^.\s/, "")); setTimeout(() => inputRef.current?.focus(), 50); }}
+                      style={{ textAlign: "left", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem", padding: "0.75rem 1rem", fontSize: "0.875rem", cursor: "pointer", color: "var(--ink)" }}
+                    >
                       {s}
                     </button>
                   ))}
@@ -263,77 +352,115 @@ When asked for a recipe, always provide: recipe name (as # heading), short descr
               </div>
             )}
 
-            {/* Chat bubbles */}
-            {messages.map(m => (
-              <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                {m.role === "assistant" && <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mr-2 mt-1 text-base">👨‍🍳</div>}
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${m.role === "user" ? "rounded-br-sm" : "rounded-bl-sm"}`}
-                  style={m.role === "user"
-                    ? { background: "var(--accent)", color: "#fff" }
-                    : { background: "var(--panel)", border: "1px solid var(--line)", color: "var(--ink)" }}
-                >
-                  {m.role === "assistant" ? <RecipeText text={m.content} /> : <p className="text-sm">{m.content}</p>}
-                </div>
-              </div>
-            ))}
-
-            {/* Loading */}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mr-2 mt-1 text-base">👨‍🍳</div>
-                <div className="rounded-2xl rounded-bl-sm px-4 py-3" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-                  <div className="flex gap-1 items-center">
-                    {[0, 150, 300].map(d => (
-                      <span key={d} className="w-2 h-2 rounded-full animate-bounce" style={{ background: "var(--accent)", animationDelay: `${d}ms` }} />
-                    ))}
-                    <span className="text-xs ml-2" style={{ color: "var(--muted)" }}>Finding your recipe…</span>
+            {/* Messages */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {messages.map((m) => (
+                <div key={m.id} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                  {m.role === "assistant" && (
+                    <div style={{ width: "2rem", height: "2rem", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: "0.5rem", marginTop: "0.25rem", fontSize: "1rem" }}>
+                      👨‍🍳
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      maxWidth: "85%",
+                      borderRadius: m.role === "user" ? "1rem 1rem 0.25rem 1rem" : "1rem 1rem 1rem 0.25rem",
+                      padding: "0.75rem 1rem",
+                      ...(m.role === "user"
+                        ? { background: "var(--accent)", color: "#fff" }
+                        : { background: "var(--panel)", border: "1px solid var(--line)", color: "var(--ink)" }),
+                    }}
+                  >
+                    {m.role === "assistant" ? <RecipeDisplay text={m.text} /> : <p style={{ fontSize: "0.875rem" }}>{m.text}</p>}
                   </div>
                 </div>
-              </div>
-            )}
+              ))}
 
-            <div ref={bottomRef} />
+              {/* Loading */}
+              {busy && (
+                <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ width: "2rem", height: "2rem", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: "0.5rem", marginTop: "0.25rem", fontSize: "1rem" }}>
+                    👨‍🍳
+                  </div>
+                  <div style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem 1rem 1rem 0.25rem", padding: "0.75rem 1rem" }}>
+                    <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+                      {[0, 150, 300].map((d) => (
+                        <span
+                          key={d}
+                          className="animate-bounce"
+                          style={{ width: "0.4rem", height: "0.4rem", borderRadius: "50%", background: "var(--accent)", display: "inline-block", animationDelay: `${d}ms` }}
+                        />
+                      ))}
+                      <span style={{ fontSize: "0.75rem", color: "var(--muted)", marginLeft: "0.5rem" }}>Finding your recipe…</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
           </div>
 
-          {/* Quick tweaks */}
-          {messages.some(m => m.role === "assistant") && !loading && (
-            <div className="flex gap-2 overflow-x-auto pb-2 shrink-0" style={{ scrollbarWidth: "none" }}>
-              {TWEAKS.map(t => (
-                <button key={t} onClick={() => { setInput(t); setTimeout(() => inputRef.current?.focus(), 50); }}
-                  className="shrink-0 px-3 py-1 rounded-full text-xs font-medium hover:opacity-70 whitespace-nowrap"
-                  style={{ background: "var(--panel)", border: "1px solid var(--line-strong)", color: "var(--ink)" }}>
+          {/* Follow-up chips */}
+          {messages.some((m) => m.role === "assistant") && !busy && (
+            <div style={{ display: "flex", gap: "0.5rem", overflowX: "auto", paddingBottom: "0.5rem", flexShrink: 0, scrollbarWidth: "none" }}>
+              {FOLLOW_UPS.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => { setInput(t); setTimeout(() => inputRef.current?.focus(), 50); }}
+                  style={{ flexShrink: 0, background: "var(--panel)", border: "1px solid var(--line-strong)", borderRadius: "9999px", padding: "0.25rem 0.75rem", fontSize: "0.75rem", cursor: "pointer", color: "var(--ink)", whiteSpace: "nowrap" }}
+                >
                   {t}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Input box */}
-          <div className="shrink-0 mt-2 rounded-2xl flex items-end gap-2 p-3" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+          {/* Input */}
+          <div style={{ flexShrink: 0, marginTop: "0.5rem", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "1rem", display: "flex", alignItems: "flex-end", gap: "0.5rem", padding: "0.75rem" }}>
             <textarea
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder={user ? "Search for a recipe, e.g. "summer salad"…" : "Sign in to start cooking…"}
-              disabled={loading || !user}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendMessage();
+                }
+              }}
+              placeholder={user ? "Search for a recipe, e.g. "pasta carbonara"…" : "Sign in to start cooking…"}
+              disabled={busy || !user}
               rows={1}
-              className="flex-1 resize-none bg-transparent outline-none text-sm leading-relaxed py-1 disabled:opacity-50"
-              style={{ color: "var(--ink)", maxHeight: "7rem" }}
-              onInput={e => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 112) + "px"; }}
+              style={{
+                flex: 1, resize: "none", background: "transparent", outline: "none",
+                fontSize: "0.875rem", lineHeight: 1.5, padding: "0.125rem 0",
+                color: "var(--ink)", border: "none", maxHeight: "7rem",
+                opacity: busy || !user ? 0.5 : 1,
+                fontFamily: "inherit",
+              }}
+              onInput={(e) => {
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 112) + "px";
+              }}
             />
             <button
-              onClick={() => send()}
-              disabled={loading || !input.trim() || !user}
-              className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center hover:opacity-80 disabled:opacity-30"
-              style={{ background: "var(--accent)", color: "#fff" }}
+              onClick={() => void sendMessage()}
+              disabled={busy || !input.trim() || !user}
+              style={{
+                flexShrink: 0, width: "2.25rem", height: "2.25rem", borderRadius: "0.75rem",
+                background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: busy || !input.trim() || !user ? 0.3 : 1,
+              }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>
             </button>
           </div>
+
         </div>
       )}
     </Shell>
