@@ -428,7 +428,7 @@ For follow-up questions about missing ingredients or utensils, give practical al
                   void sendMessage();
                 }
               }}
-              placeholder={user ? "Search for a recipe, e.g. "pasta carbonara"…" : "Sign in to start cooking…"}
+              placeholder={user ? "Search for a recipe, e.g. “pasta carbonara”…" : "Sign in to start cooking…"}
               disabled={busy || !user}
               rows={1}
               style={{
