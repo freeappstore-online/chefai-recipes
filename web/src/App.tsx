@@ -32,6 +32,29 @@ function smartUnit(unit: string, scaledAmt: string): string {
   return plurals[unit] ?? unit;
 }
 
+const labelStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 600,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  display: "block",
+  marginBottom: "0.4rem",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  borderRadius: "0.75rem",
+  padding: "0.6rem 0.75rem",
+  fontSize: "0.9rem",
+  outline: "none",
+  boxSizing: "border-box",
+  background: "var(--panel)",
+  border: "1px solid var(--line)",
+  color: "var(--ink)",
+  fontFamily: "inherit",
+};
+
 export default function App() {
   const [recipeName, setRecipeName] = useState("");
   const [originalPortions, setOriginalPortions] = useState(1);
@@ -41,30 +64,25 @@ export default function App() {
     { id: "2", amount: "", unit: "", name: "" },
     { id: "3", amount: "", unit: "", name: "" },
   ]);
-  const [showResult, setShowResult] = useState(false);
+  const [hasCalculated, setHasCalculated] = useState(false);
 
   const factor = originalPortions > 0 ? targetPortions / originalPortions : 1;
+
+  // All ingredients that have at least a name filled in
   const filledIngredients = ingredients.filter((i) => i.name.trim() !== "");
+  const canCalculate = filledIngredients.length > 0;
 
   function addIngredient() {
     setIngredients((prev) => [...prev, { id: String(Date.now()), amount: "", unit: "", name: "" }]);
-    setShowResult(false);
   }
 
   function removeIngredient(id: string) {
     if (ingredients.length === 1) return;
     setIngredients((prev) => prev.filter((i) => i.id !== id));
-    setShowResult(false);
   }
 
   function updateIngredient(id: string, field: keyof Ingredient, value: string) {
     setIngredients((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
-    setShowResult(false);
-  }
-
-  function handleCalculate() {
-    if (filledIngredients.length === 0) return;
-    setShowResult(true);
   }
 
   function handleReset() {
@@ -76,7 +94,7 @@ export default function App() {
       { id: "2", amount: "", unit: "", name: "" },
       { id: "3", amount: "", unit: "", name: "" },
     ]);
-    setShowResult(false);
+    setHasCalculated(false);
   }
 
   const navItems = [
@@ -118,7 +136,7 @@ export default function App() {
                 min={1}
                 max={100}
                 value={originalPortions}
-                onChange={(e) => { setOriginalPortions(Math.max(1, parseInt(e.target.value) || 1)); setShowResult(false); }}
+                onChange={(e) => setOriginalPortions(Math.max(1, parseInt(e.target.value) || 1))}
                 style={{ ...inputStyle, textAlign: "center" }}
               />
               <span style={{ color: "var(--muted)", fontSize: "0.875rem", whiteSpace: "nowrap" }}>
@@ -131,7 +149,7 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <select
                 value={targetPortions}
-                onChange={(e) => { setTargetPortions(parseInt(e.target.value)); setShowResult(false); }}
+                onChange={(e) => setTargetPortions(parseInt(e.target.value))}
                 style={{ ...inputStyle, cursor: "pointer" }}
               >
                 {PEOPLE_OPTIONS.map((n) => (
@@ -187,7 +205,7 @@ export default function App() {
                 <button
                   onClick={() => removeIngredient(ing.id)}
                   disabled={ingredients.length === 1}
-                  style={{ background: "none", border: "none", cursor: ingredients.length === 1 ? "default" : "pointer", color: "var(--muted)", fontSize: "1.1rem", lineHeight: 1, opacity: ingredients.length === 1 ? 0.2 : 0.6, padding: 0 }}
+                  style={{ background: "none", border: "none", cursor: ingredients.length === 1 ? "default" : "pointer", color: "var(--muted)", fontSize: "1.25rem", lineHeight: 1, opacity: ingredients.length === 1 ? 0.2 : 0.6, padding: 0 }}
                 >
                   ×
                 </button>
@@ -205,24 +223,30 @@ export default function App() {
 
         {/* Calculate button */}
         <button
-          onClick={handleCalculate}
-          disabled={filledIngredients.length === 0}
+          onClick={() => setHasCalculated(true)}
+          disabled={!canCalculate}
           style={{
-            width: "100%", background: "var(--accent)", color: "#fff", borderRadius: "0.75rem",
-            padding: "0.9rem", fontWeight: 700, fontSize: "1.05rem", border: "none",
-            cursor: filledIngredients.length === 0 ? "not-allowed" : "pointer",
-            opacity: filledIngredients.length === 0 ? 0.4 : 1,
+            width: "100%",
+            background: "var(--accent)",
+            color: "#fff",
+            borderRadius: "0.75rem",
+            padding: "0.9rem",
+            fontWeight: 700,
+            fontSize: "1.05rem",
+            border: "none",
+            cursor: canCalculate ? "pointer" : "not-allowed",
+            opacity: canCalculate ? 1 : 0.4,
             marginBottom: "1.5rem",
             fontFamily: "inherit",
           }}
         >
-          Calculate Ingredients 🔢
+          Scale Recipe 🔢
         </button>
 
-        {/* Result */}
-        {showResult && filledIngredients.length > 0 && (
+        {/* Result — shown once Calculate is pressed, updates live */}
+        {hasCalculated && filledIngredients.length > 0 && (
           <div style={{ background: "var(--panel)", border: "2px solid var(--accent)", borderRadius: "1.25rem", padding: "1.5rem" }}>
-            {/* Result header */}
+            {/* Header */}
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem" }}>
               <div>
                 {recipeName && (
@@ -231,8 +255,12 @@ export default function App() {
                   </h2>
                 )}
                 <p style={{ fontSize: "0.875rem", color: "var(--muted)" }}>
-                  For <strong style={{ color: "var(--accent)" }}>{targetPortions} {targetPortions === 1 ? "person" : "people"}</strong>
-                  {" "}— scaled ×{parseFloat(factor.toFixed(2))} from {originalPortions} {originalPortions === 1 ? "portion" : "portions"}
+                  For{" "}
+                  <strong style={{ color: "var(--accent)" }}>
+                    {targetPortions} {targetPortions === 1 ? "person" : "people"}
+                  </strong>
+                  {" "}— scaled ×{parseFloat(factor.toFixed(2))} from {originalPortions}{" "}
+                  {originalPortions === 1 ? "portion" : "portions"}
                 </p>
               </div>
               <span style={{ fontSize: "2rem" }}>🍳</span>
@@ -279,26 +307,3 @@ export default function App() {
     </Shell>
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "0.72rem",
-  fontWeight: 600,
-  color: "var(--muted)",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-  display: "block",
-  marginBottom: "0.4rem",
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  borderRadius: "0.75rem",
-  padding: "0.6rem 0.75rem",
-  fontSize: "0.9rem",
-  outline: "none",
-  boxSizing: "border-box",
-  background: "var(--panel)",
-  border: "1px solid var(--line)",
-  color: "var(--ink)",
-  fontFamily: "inherit",
-};
