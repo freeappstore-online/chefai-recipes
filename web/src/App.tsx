@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Shell } from "./components/Shell";
+import { Scaler } from "./components/Scaler";
 import { initApp } from "@freeappstore/sdk";
 import { useAuth } from "@freeappstore/sdk/hooks";
 
@@ -85,7 +86,7 @@ function RecipeDisplay({ text }: { text: string }) {
 
 export default function App() {
   const { user, loading: authLoading } = useAuth(fas);
-  const [view, setView] = useState<"chat" | "diet">("chat");
+  const [view, setView] = useState<"chat" | "diet" | "scaler">("chat");
   const [avoid, setAvoid] = useState<string[]>([]);
   const [avoidInput, setAvoidInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -181,11 +182,15 @@ For follow-up questions about missing ingredients or utensils, give practical al
 
   const navItems = [
     { id: "chat", icon: "🍳", label: "Recipes", active: view === "chat", onClick: () => setView("chat") },
+    { id: "scaler", icon: "🔢", label: "Scaler", active: view === "scaler", onClick: () => setView("scaler") },
     { id: "diet", icon: "🚫", label: "My Diet", active: view === "diet", onClick: () => setView("diet") },
   ];
 
   return (
     <Shell navItems={navItems} title="ChefAI">
+
+      {/* ── SCALER VIEW ── */}
+      {view === "scaler" && <Scaler />}
 
       {/* ── DIET VIEW ── */}
       {view === "diet" && (
@@ -209,6 +214,7 @@ For follow-up questions about missing ingredients or utensils, give practical al
                   flex: 1, borderRadius: "0.75rem", padding: "0.5rem 1rem",
                   fontSize: "0.875rem", outline: "none",
                   background: "var(--paper)", border: "1px solid var(--line)", color: "var(--ink)",
+                  fontFamily: "inherit",
                 }}
               />
               <button
@@ -428,7 +434,7 @@ For follow-up questions about missing ingredients or utensils, give practical al
                   void sendMessage();
                 }
               }}
-              placeholder={user ? "Search for a recipe, e.g. “pasta carbonara”…" : "Sign in to start cooking…"}
+              placeholder={user ? "Search for a recipe, e.g. "pasta carbonara"…" : "Sign in to start cooking…"}
               disabled={busy || !user}
               rows={1}
               style={{
